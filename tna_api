@@ -1,0 +1,124 @@
+#!/usr/bin/python3
+"""
+BNA Module
+"""
+###############################################################################
+
+__author__ = "Jared Winter"
+__copyright__ = "Copyright 2019, jwinternet"
+__credits__ = ""
+__license__ = "GNU GPL v3"
+__version__ = "0.1.0"
+__updated__ = "10/22/2019"
+__email__ = "jaredwinter2015@outlook.com"
+__contributors__ = ""
+__status__ = "PROD"
+
+###############################################################################
+
+import json
+import requests
+from requests.packages.urllib3.exceptions import InsecureRequestWarning
+import getpass
+
+###############################################################################
+
+# Disable warnings like unsigned certificates, etc.
+requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
+
+def configs_available(bna_url, username, password, hostname):
+	"""
+	Retrieves all available configs stored in BNA for a device based on
+	its hostname, saves it to the local folder, and asks if you would
+	like to view it now.
+
+	:param bna_url: IP/URL of the bna server (ex: 'bna-prod.jwinter.net')
+	:param username: The username used to access bna
+	:param password: The password used to access bna
+	:param hostname: Hostname of the device requested
+	"""
+	# Token creation process
+	headers = {"Content-type": "application/x-www-form-urlencoded"}
+	data = {
+		"grant_type" : "password",
+		"username" : username,
+		"password" : password
+	}
+	response = requests.post(
+		bna_url + "/token",
+		headers=headers,
+		data=data,
+		verify=False
+	)	
+	data = response.json()
+	token = data["access_token"]
+	tokenType = data["token_type"]
+	headers = {"Authorization": tokenType + " " + token}
+
+	# Finds all available configs for the specified hostname
+	get_url = bna_url + "/v2.1/devices/{}.jwinter.net/" \
+		"trusted_configurations".format(hostname)
+	response = requests.get(
+		get_url,
+		headers=headers,
+		verify=False
+	)
+	data = response.json()
+	cfg_key = []
+	print("The following BNA configs were found:\n")
+	image_number = 1
+	for d in data:
+		print(image_number)
+		image_number += 1
+		creation_date = d['created']
+		image_name = d['osImageName']
+		key = d['id']
+		cfg_key.append(key)
+		print("Creation Date: " + creation_date )
+		print("Image Name: " + image_name)
+		print("Config Key: " + key + ("\n"))
+
+	user_input = input("Which config would you like to download? ")
+
+	if user_input == '1':
+		config_choice = cfg_key[0]
+	elif user_input == '2':
+		config_choice = cfg_key[1]
+
+	get_config = bna_url + "/v2.1/devices/{}.pncint.net/" \
+		"configurations/{}/data".format(hostname, config_choice)
+	
+	response = requests.get(
+		get_config,
+		headers=headers,
+		verify=False
+	)
+	data = response
+	first_list = []
+	for d in data:
+		new_data = d.decode('utf-8', 'ignore')
+		first_list.append(new_data)
+	with open('config_file.txt', 'w') as c:
+		for f in first_list:
+			c.write(f)
+	
+	# Deletes the previously created token
+	response = requests.delete(
+		bna_url + "/token",
+		headers=headers,
+		verify=False
+	)
+	print("\nThe config has been saved to your local folder" +
+		" as 'config_file.txt'.")
+	the_input = input(
+		"Would you like to see the config file now? Y/N: "
+	)
+	if the_input == 'Y':
+		with open('config_file.txt', 'r') as content_file:
+			content = content_file.read()
+			print(content)
+
+###############################################################################
+
+if __name__ == "__main__":
+	main()
